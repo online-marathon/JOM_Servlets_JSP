@@ -116,7 +116,9 @@ public class UpdateTaskServletTest {
                 .method(HttpMethod.POST)
                 .uri("/edit-task")
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .body(BodyInserters.fromFormData("title", "Task #4").with("priority", "HIGH"))
+                .body(BodyInserters.fromFormData("id", "1")
+                        .with("title", "Task #4")
+                        .with("priority", "HIGH"))
                 .exchange()
                 .expectStatus().is3xxRedirection()
                 .expectBody().isEmpty();
@@ -143,7 +145,7 @@ public class UpdateTaskServletTest {
     }
 
     @Test
-    public void testXInvalidPostRequest() {
+    public void testInvalidPostRequest() {
 
         WebTestClient.RequestHeadersSpec<?> requestHeaders = WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + WEB_PORT)
@@ -151,7 +153,9 @@ public class UpdateTaskServletTest {
                 .method(HttpMethod.POST)
                 .uri("/edit-task")
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .body(BodyInserters.fromFormData("title", "Task #2").with("priority", "MEDIUM"));
+                .body(BodyInserters.fromFormData("id", "1")
+                        .with("title", "Task #2")
+                        .with("priority", "MEDIUM"));
 
         byte[] body = requestHeaders.exchange()
                 .expectStatus().isOk()
@@ -168,18 +172,8 @@ public class UpdateTaskServletTest {
     }
 
     @Test
-    public void testCorrectTaskRead() throws ServletException, IOException {
-        when(request.getParameter("id")).thenReturn("3");
-        when(request.getRequestDispatcher(anyString())).thenReturn(requestDispatcher);
-        when(taskRepository.read(anyInt())).thenReturn(new Task());
-
-        updateTaskServlet.doGet(request, response);
-
-        verify(taskRepository, times(1)).read(anyInt());
-    }
-
-    @Test
     public void testCorrectTaskUpdate() throws ServletException, IOException {
+        when(request.getParameter("id")).thenReturn("1");
         when(request.getParameter("title")).thenReturn("Task #3");
         when(request.getParameter("priority")).thenReturn("MEDIUM");
         when(request.getRequestDispatcher(anyString())).thenReturn(requestDispatcher);
