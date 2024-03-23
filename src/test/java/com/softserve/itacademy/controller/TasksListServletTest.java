@@ -100,7 +100,7 @@ public class TasksListServletTest {
     @Test
     public void testCorrectTasksRead() throws ServletException, IOException {
         when(request.getRequestDispatcher(anyString())).thenReturn(requestDispatcher);
-        when(taskRepository.all()).thenReturn(anyList());
+        when(taskRepository.all()).thenReturn(java.util.List.of());
 
         tasksListServlet.doGet(request, response);
 
