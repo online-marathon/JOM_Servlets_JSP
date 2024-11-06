@@ -7,18 +7,66 @@ import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.apache.catalina.Globals;
+import org.apache.catalina.LifecycleException;
+import org.apache.catalina.WebResourceRoot;
+import org.apache.catalina.core.StandardContext;
+import org.apache.catalina.startup.Tomcat;
+import org.apache.catalina.webresources.DirResourceSet;
+import org.apache.catalina.webresources.StandardRoot;
 import org.junit.jupiter.api.*;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.http.HttpMethod;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.reactive.function.BodyInserters;
 
+import java.io.File;
 import java.io.IOException;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-@DisplayName("Unit Tests for CreateTaskServlet")
-public class CreateTaskServletTest {
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+public class UpdateTaskServletTest {
+
+    private static Tomcat tomcat;
+    private static final String WEB_PORT = "8080";
+
+    @BeforeAll
+    public static void startServer() throws ServletException, LifecycleException {
+        String webappDirLocation = "src/main/webapp/";
+        tomcat = new Tomcat();
+
+        String webPort = System.getenv("PORT");
+        if (webPort == null || webPort.isEmpty()) {
+            webPort = WEB_PORT;
+        }
+
+        tomcat.setPort(Integer.parseInt(webPort));
+
+        StandardContext ctx = (StandardContext) tomcat.addWebapp("/", new File(webappDirLocation).getAbsolutePath());
+        ctx.getServletContext().setAttribute(Globals.ALT_DD_ATTR, webappDirLocation + "WEB-INF/web.xml");
+
+        File additionWebInfClasses = new File("target/classes");
+        WebResourceRoot resources = new StandardRoot(ctx);
+        resources.addPreResources(new DirResourceSet(resources, "/WEB-INF/classes",
+                additionWebInfClasses.getAbsolutePath(), "/"));
+        ctx.setResources(resources);
+
+        tomcat.start();
+    }
+
+    @AfterAll
+    public static void stopServer() throws LifecycleException {
+        tomcat.stop();
+        tomcat.destroy();
+    }
+
+    @Mock
+    private Task task;
 
     @Mock
     private TaskRepository taskRepository;
@@ -33,63 +81,115 @@ public class CreateTaskServletTest {
     private RequestDispatcher requestDispatcher;
 
     @InjectMocks
-    private final CreateTaskServlet createTaskServlet = new CreateTaskServlet();
+    private final UpdateTaskServlet updateTaskServlet = new UpdateTaskServlet();
 
     @BeforeEach
-    void setUp() {
+    void initialize() {
         MockitoAnnotations.openMocks(this);
         TaskRepository.getTaskRepository().deleteAll();
     }
 
     @Test
-    @DisplayName("GET /create-task should display task creation page")
-    void testGetRequestDisplaysPage() throws ServletException, IOException {
-        when(request.getRequestDispatcher(anyString())).thenReturn(requestDispatcher);
+    @Order(1)
+    @DisplayName("GET /edit-task should display the edit page for valid ID")
+    public void testValidGetRequest() {
+        byte[] body = WebTestClient.bindToServer()
+                .baseUrl("http://localhost:" + WEB_PORT)
+                .build()
+                .method(HttpMethod.GET)
+                .uri("/edit-task?id=1")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().contentType("text/html;charset=UTF-8")
+                .expectBody().returnResult().getResponseBody();
 
-        createTaskServlet.doGet(request, response);
+        assert body != null;
+        Assertions.assertTrue(body.length > 0);
 
-        verify(request, times(1)).getRequestDispatcher("/WEB-INF/pages/create-task.jsp");
-        verify(requestDispatcher, times(1)).forward(request, response);
+        String strBody = new String(body);
+        Assertions.assertTrue(strBody.contains("value=\"Task #1\""), "Expected value in input field but it was empty!");
+        Assertions.assertTrue(strBody.contains("value=\"MEDIUM\" selected"), "Expected value in drop-down list but it was empty!");
     }
 
     @Test
-    @DisplayName("POST /create-task should create a new task if valid data is provided")
-    void testValidPostRequest() throws ServletException, IOException {
+    @Order(2)
+    @DisplayName("POST /edit-task should update task and redirect for valid input")
+    public void testValidPostRequest() throws ServletException, IOException {
+        WebTestClient.bindToServer()
+                .baseUrl("http://localhost:" + WEB_PORT)
+                .build()
+                .method(HttpMethod.POST)
+                .uri("/edit-task")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .body(BodyInserters.fromFormData("id", "1")
+                        .with("title", "Task #4")
+                        .with("priority", "HIGH"))
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectBody().isEmpty();
+    }
+
+    @Test
+    @Order(3)
+    @DisplayName("GET /edit-task with invalid ID should return 404 and error message")
+    public void testInvalidGetRequest() {
+        byte[] body = WebTestClient.bindToServer()
+                .baseUrl("http://localhost:" + WEB_PORT)
+                .build()
+                .method(HttpMethod.GET)
+                .uri("/edit-task?id=3")
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectHeader().contentType("text/html;charset=UTF-8")
+                .expectBody().returnResult().getResponseBody();
+
+        assert body != null;
+        Assertions.assertTrue(body.length > 0);
+
+        String strBody = new String(body);
+        Assertions.assertTrue(strBody.contains("Task with ID '3' not found in To-Do List!"), "Expected error message not found!");
+    }
+
+    @Test
+    @Order(4)
+    @DisplayName("POST /edit-task should display error for duplicate title")
+    public void testInvalidPostRequest() {
+        WebTestClient.RequestHeadersSpec<?> requestHeaders = WebTestClient.bindToServer()
+                .baseUrl("http://localhost:" + WEB_PORT)
+                .build()
+                .method(HttpMethod.POST)
+                .uri("/edit-task")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .body(BodyInserters.fromFormData("id", "1")
+                        .with("title", "Task #2")
+                        .with("priority", "MEDIUM"));
+
+        byte[] body = requestHeaders.exchange()
+                .expectStatus().isOk()
+                .expectHeader().contentType("text/html;charset=UTF-8")
+                .expectBody().returnResult().getResponseBody();
+
+        assert body != null;
+        Assertions.assertTrue(body.length > 0);
+
+        String strBody = new String(body);
+        Assertions.assertTrue(strBody.contains("Task with a given name already exists!"), "Expected error message not found!");
+        Assertions.assertTrue(strBody.contains("value=\"Task #2\""), "Expected value in input field but it was empty!");
+        Assertions.assertTrue(strBody.contains("value=\"MEDIUM\" selected"), "Expected value in drop-down list but it was empty!");
+    }
+
+    @Test
+    @Order(5)
+    @DisplayName("POST /edit-task should call repository update method correctly")
+    public void testCorrectTaskUpdate() throws ServletException, IOException {
+        when(request.getParameter("id")).thenReturn("1");
         when(request.getParameter("title")).thenReturn("Task #3");
         when(request.getParameter("priority")).thenReturn("MEDIUM");
-        when(taskRepository.create(any(Task.class))).thenReturn(true);
-
-        createTaskServlet.doPost(request, response);
-
-        verify(taskRepository, times(1)).create(any(Task.class));
-        verify(response, times(1)).sendRedirect("/tasks-list");
-    }
-
-    @Test
-    @DisplayName("POST /create-task should fail when task with the same title exists")
-    void testInvalidPostRequestWithExistingTitle() throws ServletException, IOException {
-        when(request.getParameter("title")).thenReturn("Task #2");
-        when(request.getParameter("priority")).thenReturn("MEDIUM");
-        when(taskRepository.create(any(Task.class))).thenReturn(false);
         when(request.getRequestDispatcher(anyString())).thenReturn(requestDispatcher);
+        when(taskRepository.update(any(Task.class))).thenReturn(true);
 
-        createTaskServlet.doPost(request, response);
+        updateTaskServlet.doPost(request, response);
 
-        verify(request, times(1)).setAttribute(eq("errorMessage"), eq("Task with a given name already exists!"));
-        verify(request, times(1)).getRequestDispatcher("/WEB-INF/pages/create-task.jsp");
-        verify(requestDispatcher, times(1)).forward(request, response);
+        verify(taskRepository, times(1)).update(any(Task.class));
     }
-
-    @Test
-    @DisplayName("Repository should successfully create a unique task")
-    void testRepositoryCreateTask() {
-        Task task = new Task("Unique Task", Priority.MEDIUM);
-        when(taskRepository.create(any(Task.class))).thenReturn(true);
-
-        boolean created = taskRepository.create(task);
-        Assertions.assertTrue(created, "Expected task to be created successfully");
-
-        verify(taskRepository, times(1)).create(task);
-    }
-
 }
