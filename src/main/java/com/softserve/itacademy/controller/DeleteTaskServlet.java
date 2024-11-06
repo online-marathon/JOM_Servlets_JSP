@@ -16,7 +16,6 @@ public class DeleteTaskServlet extends HttpServlet {
 
     @Override
     public void init() {
-        // Initialize the task repository when the servlet is first created
         taskRepository = TaskRepository.getTaskRepository();
     }
 
