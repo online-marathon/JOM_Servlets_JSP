@@ -3,6 +3,10 @@ package com.softserve.itacademy.controller;
 import com.softserve.itacademy.model.Priority;
 import com.softserve.itacademy.model.Task;
 import com.softserve.itacademy.repository.TaskRepository;
+import jakarta.servlet.RequestDispatcher;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.apache.catalina.Globals;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.WebResourceRoot;
@@ -10,8 +14,7 @@ import org.apache.catalina.core.StandardContext;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.catalina.webresources.DirResourceSet;
 import org.apache.catalina.webresources.StandardRoot;
-import org.junit.*;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.*;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -19,29 +22,26 @@ import org.springframework.http.HttpMethod;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 
-import javax.servlet.RequestDispatcher;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.IOException;
 
-import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class UpdateTaskServletTest {
+
     private static Tomcat tomcat;
     private static final String WEB_PORT = "8080";
 
-    @BeforeClass
+    @BeforeAll
     public static void startServer() throws ServletException, LifecycleException {
         String webappDirLocation = "src/main/webapp/";
         tomcat = new Tomcat();
 
         String webPort = System.getenv("PORT");
-        if(webPort == null || webPort.isEmpty()) {
+        if (webPort == null || webPort.isEmpty()) {
             webPort = WEB_PORT;
         }
 
@@ -49,7 +49,6 @@ public class UpdateTaskServletTest {
 
         StandardContext ctx = (StandardContext) tomcat.addWebapp("/", new File(webappDirLocation).getAbsolutePath());
         ctx.getServletContext().setAttribute(Globals.ALT_DD_ATTR, webappDirLocation + "WEB-INF/web.xml");
-        System.out.println("configuring app with basedir: " + new File("./" + webappDirLocation).getAbsolutePath());
 
         File additionWebInfClasses = new File("target/classes");
         WebResourceRoot resources = new StandardRoot(ctx);
@@ -60,35 +59,37 @@ public class UpdateTaskServletTest {
         tomcat.start();
     }
 
-    @AfterClass
+    @AfterAll
     public static void stopServer() throws LifecycleException {
         tomcat.stop();
         tomcat.destroy();
     }
 
     @Mock
-    private Task task;
-    @Mock
     private TaskRepository taskRepository;
+
     @Mock
     private HttpServletRequest request;
+
     @Mock
     private HttpServletResponse response;
+
     @Mock
     private RequestDispatcher requestDispatcher;
 
     @InjectMocks
     private final UpdateTaskServlet updateTaskServlet = new UpdateTaskServlet();
 
-    @Before
+    @BeforeEach
     public void initialize() {
         MockitoAnnotations.openMocks(this);
         TaskRepository.getTaskRepository().deleteAll();
     }
 
     @Test
+    @Order(1)
+    @DisplayName("GET /edit-task should display task edit page with valid task data")
     public void testValidGetRequest() {
-
         byte[] body = WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + WEB_PORT)
                 .build()
@@ -99,17 +100,18 @@ public class UpdateTaskServletTest {
                 .expectHeader().contentType("text/html;charset=UTF-8")
                 .expectBody().returnResult().getResponseBody();
 
-        assert body != null;
-        Assert.assertTrue(body.length > 0);
+        Assertions.assertNotNull(body, "Response body is null");
+        Assertions.assertTrue(body.length > 0, "Response body is empty");
 
         String strBody = new String(body);
-        Assert.assertTrue("Expected value in input field but it was empty!", strBody.contains("value=\"Task #1\""));
-        Assert.assertTrue("Expected value in drop-down list but it was empty!", strBody.contains("value=\"MEDIUM\" selected"));
+        Assertions.assertTrue(strBody.contains("value=\"Task #1\""), "Expected value in input field but it was empty!");
+        Assertions.assertTrue(strBody.contains("value=\"MEDIUM\" selected"), "Expected value in drop-down list but it was empty!");
     }
 
     @Test
+    @Order(2)
+    @DisplayName("POST /edit-task should update task and redirect on valid data")
     public void testValidPostRequest() throws ServletException, IOException {
-
         WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + WEB_PORT)
                 .build()
@@ -125,8 +127,9 @@ public class UpdateTaskServletTest {
     }
 
     @Test
+    @Order(3)
+    @DisplayName("GET /edit-task should return 404 for invalid task ID")
     public void testInvalidGetRequest() {
-
         byte[] body = WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + WEB_PORT)
                 .build()
@@ -137,17 +140,18 @@ public class UpdateTaskServletTest {
                 .expectHeader().contentType("text/html;charset=UTF-8")
                 .expectBody().returnResult().getResponseBody();
 
-        assert body != null;
-        Assert.assertTrue(body.length > 0);
+        Assertions.assertNotNull(body, "Response body is null");
+        Assertions.assertTrue(body.length > 0, "Response body is empty");
 
         String strBody = new String(body);
-        Assert.assertTrue("Expected message 'Task with ID '3' not found in To-Do List!'", strBody.contains("Task with ID '3' not found in To-Do List!"));
+        Assertions.assertTrue(strBody.contains("Task with ID '3' not found in To-Do List!"), "Expected error message not found!");
     }
 
     @Test
+    @Order(4)
+    @DisplayName("POST /edit-task should display error on duplicate title")
     public void testInvalidPostRequest() {
-
-        WebTestClient.RequestHeadersSpec<?> requestHeaders = WebTestClient.bindToServer()
+        byte[] body = WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + WEB_PORT)
                 .build()
                 .method(HttpMethod.POST)
@@ -155,29 +159,30 @@ public class UpdateTaskServletTest {
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .body(BodyInserters.fromFormData("id", "1")
                         .with("title", "Task #2")
-                        .with("priority", "MEDIUM"));
-
-        byte[] body = requestHeaders.exchange()
+                        .with("priority", "MEDIUM"))
+                .exchange()
                 .expectStatus().isOk()
                 .expectHeader().contentType("text/html;charset=UTF-8")
                 .expectBody().returnResult().getResponseBody();
 
-        assert body != null;
-        Assert.assertTrue(body.length > 0);
+        Assertions.assertNotNull(body, "Response body is null");
+        Assertions.assertTrue(body.length > 0, "Response body is empty");
 
         String strBody = new String(body);
-        Assert.assertTrue("Expected message 'Task with a given name already exists!'", strBody.contains("Task with a given name already exists!"));
-        Assert.assertTrue("Expected value in input field but it was empty!", strBody.contains("value=\"Task #2\""));
-        Assert.assertTrue("Expected value in drop-down list but it was empty!", strBody.contains("value=\"MEDIUM\" selected"));
+        Assertions.assertTrue(strBody.contains("Task with a given name already exists!"), "Expected duplicate title error message not found!");
+        Assertions.assertTrue(strBody.contains("value=\"Task #2\""), "Expected value in input field but it was empty!");
+        Assertions.assertTrue(strBody.contains("value=\"MEDIUM\" selected"), "Expected value in drop-down list but it was empty!");
     }
 
     @Test
+    @Order(5)
+    @DisplayName("Servlet should call update method in repository")
     public void testCorrectTaskUpdate() throws ServletException, IOException {
         when(request.getParameter("id")).thenReturn("1");
         when(request.getParameter("title")).thenReturn("Task #3");
         when(request.getParameter("priority")).thenReturn("MEDIUM");
         when(request.getRequestDispatcher(anyString())).thenReturn(requestDispatcher);
-        when(taskRepository.update(task)).thenReturn(true);
+        when(taskRepository.update(any(Task.class))).thenReturn(true);
 
         updateTaskServlet.doPost(request, response);
 
