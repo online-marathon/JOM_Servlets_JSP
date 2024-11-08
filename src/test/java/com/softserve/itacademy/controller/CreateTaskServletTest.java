@@ -1,6 +1,5 @@
 package com.softserve.itacademy.controller;
 
-import com.softserve.itacademy.model.Priority;
 import com.softserve.itacademy.model.Task;
 import com.softserve.itacademy.repository.TaskRepository;
 import jakarta.servlet.RequestDispatcher;
@@ -26,11 +25,10 @@ import java.io.File;
 import java.io.IOException;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-public class UpdateTaskServletTest {
+@DisplayName("Tests for CreateTaskServlet")
+public class CreateTaskServletTest {
 
     private static Tomcat tomcat;
     private static final String WEB_PORT = "8080";
@@ -49,6 +47,7 @@ public class UpdateTaskServletTest {
 
         StandardContext ctx = (StandardContext) tomcat.addWebapp("/", new File(webappDirLocation).getAbsolutePath());
         ctx.getServletContext().setAttribute(Globals.ALT_DD_ATTR, webappDirLocation + "WEB-INF/web.xml");
+        System.out.println("Configuring app with basedir: " + new File("./" + webappDirLocation).getAbsolutePath());
 
         File additionWebInfClasses = new File("target/classes");
         WebResourceRoot resources = new StandardRoot(ctx);
@@ -66,130 +65,97 @@ public class UpdateTaskServletTest {
     }
 
     @Mock
-    private Task task;
-
-    @Mock
     private TaskRepository taskRepository;
-
     @Mock
     private HttpServletRequest request;
-
     @Mock
     private HttpServletResponse response;
-
     @Mock
     private RequestDispatcher requestDispatcher;
 
     @InjectMocks
-    private final UpdateTaskServlet updateTaskServlet = new UpdateTaskServlet();
+    private final CreateTaskServlet createTaskServlet = new CreateTaskServlet();
 
     @BeforeEach
-    void initialize() {
+    public void initialize() {
         MockitoAnnotations.openMocks(this);
         TaskRepository.getTaskRepository().deleteAll();
     }
 
     @Test
-    @Order(1)
-    @DisplayName("GET /edit-task should display the edit page for valid ID")
+    @DisplayName("GET /create-task should return task creation page with status 200")
     public void testValidGetRequest() {
         byte[] body = WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + WEB_PORT)
                 .build()
                 .method(HttpMethod.GET)
-                .uri("/edit-task?id=1")
+                .uri("/create-task")
                 .exchange()
                 .expectStatus().isOk()
                 .expectHeader().contentType("text/html;charset=UTF-8")
-                .expectBody().returnResult().getResponseBody();
+                .expectBody()
+                .returnResult()
+                .getResponseBody();
 
-        assert body != null;
-        Assertions.assertTrue(body.length > 0);
-
-        String strBody = new String(body);
-        Assertions.assertTrue(strBody.contains("value=\"Task #1\""), "Expected value in input field but it was empty!");
-        Assertions.assertTrue(strBody.contains("value=\"MEDIUM\" selected"), "Expected value in drop-down list but it was empty!");
+        Assertions.assertNotNull(body, "Response body should not be null");
+        Assertions.assertTrue(body.length > 0, "Response body should not be empty");
     }
 
     @Test
-    @Order(2)
-    @DisplayName("POST /edit-task should update task and redirect for valid input")
+    @DisplayName("POST /create-task with valid data should redirect with status 3xx")
     public void testValidPostRequest() throws ServletException, IOException {
         WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + WEB_PORT)
                 .build()
                 .method(HttpMethod.POST)
-                .uri("/edit-task")
+                .uri("/create-task")
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .body(BodyInserters.fromFormData("id", "1")
-                        .with("title", "Task #4")
-                        .with("priority", "HIGH"))
+                .body(BodyInserters.fromFormData("title", "Task #3").with("priority", "MEDIUM"))
                 .exchange()
                 .expectStatus().is3xxRedirection()
                 .expectBody().isEmpty();
     }
 
     @Test
-    @Order(3)
-    @DisplayName("GET /edit-task with invalid ID should return 404 and error message")
-    public void testInvalidGetRequest() {
-        byte[] body = WebTestClient.bindToServer()
-                .baseUrl("http://localhost:" + WEB_PORT)
-                .build()
-                .method(HttpMethod.GET)
-                .uri("/edit-task?id=3")
-                .exchange()
-                .expectStatus().isNotFound()
-                .expectHeader().contentType("text/html;charset=UTF-8")
-                .expectBody().returnResult().getResponseBody();
-
-        assert body != null;
-        Assertions.assertTrue(body.length > 0);
-
-        String strBody = new String(body);
-        Assertions.assertTrue(strBody.contains("Task with ID '3' not found in To-Do List!"), "Expected error message not found!");
-    }
-
-    @Test
-    @Order(4)
-    @DisplayName("POST /edit-task should display error for duplicate title")
+    @DisplayName("POST /create-task with existing task title should return error message")
     public void testInvalidPostRequest() {
         WebTestClient.RequestHeadersSpec<?> requestHeaders = WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + WEB_PORT)
                 .build()
                 .method(HttpMethod.POST)
-                .uri("/edit-task")
+                .uri("/create-task")
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .body(BodyInserters.fromFormData("id", "1")
-                        .with("title", "Task #2")
-                        .with("priority", "MEDIUM"));
+                .body(BodyInserters.fromFormData("title", "Task #2").with("priority", "MEDIUM"));
 
         byte[] body = requestHeaders.exchange()
                 .expectStatus().isOk()
                 .expectHeader().contentType("text/html;charset=UTF-8")
-                .expectBody().returnResult().getResponseBody();
+                .expectBody()
+                .returnResult()
+                .getResponseBody();
 
-        assert body != null;
-        Assertions.assertTrue(body.length > 0);
+        Assertions.assertNotNull(body, "Response body should not be null");
+        Assertions.assertTrue(body.length > 0, "Response body should not be empty");
 
         String strBody = new String(body);
-        Assertions.assertTrue(strBody.contains("Task with a given name already exists!"), "Expected error message not found!");
-        Assertions.assertTrue(strBody.contains("value=\"Task #2\""), "Expected value in input field but it was empty!");
-        Assertions.assertTrue(strBody.contains("value=\"MEDIUM\" selected"), "Expected value in drop-down list but it was empty!");
+        Assertions.assertTrue(strBody.contains("Task with a given name already exists!"), 
+                              "Expected error message 'Task with a given name already exists!'");
+        Assertions.assertTrue(strBody.contains("value=\"Task #2\""), 
+                              "Expected the title input field to retain the entered value");
+        Assertions.assertTrue(strBody.contains("value=\"MEDIUM\" selected"), 
+                              "Expected the priority dropdown to retain the selected priority");
     }
 
     @Test
-    @Order(5)
-    @DisplayName("POST /edit-task should call repository update method correctly")
-    public void testCorrectTaskUpdate() throws ServletException, IOException {
-        when(request.getParameter("id")).thenReturn("1");
+    @DisplayName("CreateTaskServlet should call repository create method with valid task data")
+    public void testCorrectTaskCreate() throws ServletException, IOException {
         when(request.getParameter("title")).thenReturn("Task #3");
         when(request.getParameter("priority")).thenReturn("MEDIUM");
         when(request.getRequestDispatcher(anyString())).thenReturn(requestDispatcher);
-        when(taskRepository.update(any(Task.class))).thenReturn(true);
+        when(taskRepository.create(any(Task.class))).thenReturn(true);
 
-        updateTaskServlet.doPost(request, response);
+        createTaskServlet.doPost(request, response);
 
-        verify(taskRepository, times(1)).update(any(Task.class));
+        verify(taskRepository, times(1)).create(any(Task.class));
     }
 }
