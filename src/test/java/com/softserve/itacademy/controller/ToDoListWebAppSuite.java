@@ -1,14 +1,16 @@
 package com.softserve.itacademy.controller;
 
-import org.junit.runner.RunWith;
-import org.junit.runners.Suite;
+import org.junit.platform.suite.api.SelectClasses;
+import org.junit.platform.suite.api.Suite;
 
-@RunWith(Suite.class)
-@Suite.SuiteClasses({
+@Suite
+@SelectClasses({
         CreateTaskServletTest.class,
         ReadTaskServletTest.class,
         UpdateTaskServletTest.class,
         DeleteTaskServletTest.class,
         TasksListServletTest.class
 })
-public class ToDoListWebAppSuite {  }
+public class ToDoListWebAppSuite {
+ 
+}
